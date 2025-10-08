@@ -1,0 +1,57 @@
+package main
+
+import (
+	"fmt"
+	"time"
+
+	"github.com/golang-jwt/jwt/v5"
+)
+
+// JWT Token Generator for Testing
+// This creates real JWT tokens that your API can validate
+
+func main() {
+	// Your JWT secret (should match JWT_SECRET in your API)
+	secret := "your-jwt-secret-key"
+
+	// Create token claims
+	claims := jwt.MapClaims{
+		"user_id": "user12345",           // User identifier
+		"sub":     "john.doe@example.com", // Subject (email)
+		"name":    "John Doe",            // User name
+		"role":    "admin",               // User role
+		"exp":     time.Now().Add(time.Hour * 24).Unix(), // Expires in 24 hours
+		"iat":     time.Now().Unix(),     // Issued at
+	}
+
+	// Create token
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+
+	// Sign token with secret
+	tokenString, err := token.SignedString([]byte(secret))
+	if err != nil {
+		fmt.Printf("Error creating token: %v\n", err)
+		return
+	}
+
+	fmt.Println("🔑 Generated JWT Token:")
+	fmt.Println("========================")
+	fmt.Printf("Token: %s\n\n", tokenString)
+
+	fmt.Println("📋 Token Claims:")
+	fmt.Println("================")
+	fmt.Printf("User ID: %s\n", claims["user_id"])
+	fmt.Printf("Email: %s\n", claims["sub"])
+	fmt.Printf("Name: %s\n", claims["name"])
+	fmt.Printf("Role: %s\n", claims["role"])
+	fmt.Printf("Expires: %s\n", time.Unix(claims["exp"].(int64), 0))
+
+	fmt.Println("\n🧪 Test Command:")
+	fmt.Println("================")
+	fmt.Printf(`curl -X POST \
+  -H "Authorization: Bearer %s" \
+  -H "Content-Type: application/json" \
+  -d '{"id":"test","title":"Test Album","artist":"Test Artist","price":29.99}' \
+  http://localhost:8080/albums
+`, tokenString)
+}

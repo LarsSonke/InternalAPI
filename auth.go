@@ -1,0 +1,61 @@
+package main
+
+import (
+	"fmt"
+
+	"github.com/golang-jwt/jwt/v5"
+)
+
+// Proper JWT token validation using github.com/golang-jwt/jwt/v5
+func isValidJWTToken(tokenString string) bool {
+	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
+		// Validate the signing method
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
+		}
+		// Return the secret key used to sign the token
+		return []byte(getConfig()["jwt_secret"]), nil
+	})
+
+	if err != nil {
+		return false
+	}
+
+	// Check if token is valid and not expired
+	if !token.Valid {
+		return false
+	}
+
+	return true
+}
+
+// Extract user ID from JWT token claims
+func extractUserIDFromToken(tokenString string) string {
+	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
+		// Validate the signing method
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
+		}
+		return []byte(getConfig()["jwt_secret"]), nil
+	})
+
+	if err != nil {
+		return "unknown_user" // Fallback for invalid tokens
+	}
+
+	// Extract claims
+	if claims, ok := token.Claims.(jwt.MapClaims); ok && token.Valid {
+		// Try to get user ID from different possible claim names
+		if userID, exists := claims["user_id"]; exists {
+			return fmt.Sprintf("%v", userID)
+		}
+		if userID, exists := claims["sub"]; exists { // 'sub' is standard JWT subject claim
+			return fmt.Sprintf("%v", userID)
+		}
+		if userID, exists := claims["uid"]; exists {
+			return fmt.Sprintf("%v", userID)
+		}
+	}
+
+	return "unknown_user" // Fallback if no user ID found in claims
+}

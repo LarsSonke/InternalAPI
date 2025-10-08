@@ -1,0 +1,187 @@
+package main
+
+import (
+	"bytes"
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+	"time"
+)
+
+func main() {
+	fmt.Println("🎯 INTERNAL API MONITORING & LOGGING DEMO")
+	fmt.Println("=" + string(make([]byte, 50)))
+	
+	client := &http.Client{Timeout: 10 * time.Second}
+	baseURL := "http://localhost:8080"
+	
+	// Wait for server to be ready
+	fmt.Println("⏳ Waiting for server to be ready...")
+	time.Sleep(2 * time.Second)
+	
+	// Demo 1: Health Check with Dependency Monitoring
+	fmt.Println("\n📊 DEMO 1: Health Check & Dependency Monitoring")
+	fmt.Println("-" + string(make([]byte, 50)))
+	
+	resp, err := client.Get(baseURL + "/health")
+	if err != nil {
+		fmt.Printf("❌ Health check failed: %v\n", err)
+		return
+	}
+	defer resp.Body.Close()
+	
+	body, _ := io.ReadAll(resp.Body)
+	fmt.Printf("🏥 Health Status: %d\n", resp.StatusCode)
+	fmt.Printf("📋 Request ID: %s\n", resp.Header.Get("X-Request-ID"))
+	
+	// Pretty print JSON
+	var healthData map[string]interface{}
+	json.Unmarshal(body, &healthData)
+	prettyJSON, _ := json.MarshalIndent(healthData, "", "  ")
+	fmt.Printf("📄 Response:\n%s\n", prettyJSON)
+	
+	// Demo 2: Metrics Endpoint
+	fmt.Println("\n📈 DEMO 2: Prometheus Metrics")
+	fmt.Println("-" + string(make([]byte, 50)))
+	
+	resp2, err := client.Get(baseURL + "/metrics")
+	if err != nil {
+		fmt.Printf("❌ Metrics failed: %v\n", err)
+		return
+	}
+	defer resp2.Body.Close()
+	
+	metricsBody, _ := io.ReadAll(resp2.Body)
+	fmt.Printf("📊 Metrics Status: %d\n", resp2.StatusCode)
+	fmt.Printf("📈 Sample Metrics (first 800 chars):\n")
+	fmt.Printf("%s...\n", string(metricsBody[:min(800, len(metricsBody))]))
+	
+	// Demo 3: Protected Endpoint Request (will fail without proper JWT)
+	fmt.Println("\n🔐 DEMO 3: Protected Endpoint (JWT Required)")
+	fmt.Println("-" + string(make([]byte, 50)))
+	
+	resp3, err := client.Get(baseURL + "/albums")
+	if err != nil {
+		fmt.Printf("❌ Albums request failed: %v\n", err)
+	} else {
+		defer resp3.Body.Close()
+		albumsBody, _ := io.ReadAll(resp3.Body)
+		fmt.Printf("🎵 Albums Status: %d\n", resp3.StatusCode)
+		fmt.Printf("📋 Request ID: %s\n", resp3.Header.Get("X-Request-ID"))
+		
+		var albumsData map[string]interface{}
+		json.Unmarshal(albumsBody, &albumsData)
+		prettyAlbums, _ := json.MarshalIndent(albumsData, "", "  ")
+		fmt.Printf("📄 Response:\n%s\n", prettyAlbums)
+	}
+	
+	// Demo 4: Valid JWT Request 
+	fmt.Println("\n🎫 DEMO 4: Request with Valid JWT Token")
+	fmt.Println("-" + string(make([]byte, 50)))
+	
+	// Create request with JWT token
+	req, _ := http.NewRequest("GET", baseURL+"/albums", nil)
+	req.Header.Set("Authorization", "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjE3NTk4MjY1NjMsImlhdCI6MTc1OTc0MDE2MywibmFtZSI6IkpvaG4gRG9lIiwicm9sZSI6ImFkbWluIiwic3ViIjoiam9obi5kb2VAZXhhbXBsZS5jb20iLCJ1c2VyX2lkIjoidXNlcjEyMzQ1In0.5AVfEPUD5b9iWVkT-oA8k2Kk-S0B8X3bmE8DdY0n9Gs")
+	
+	resp4, err := client.Do(req)
+	if err != nil {
+		fmt.Printf("❌ JWT request failed: %v\n", err)
+	} else {
+		defer resp4.Body.Close()
+		jwtBody, _ := io.ReadAll(resp4.Body)
+		fmt.Printf("🎫 JWT Request Status: %d\n", resp4.StatusCode)
+		fmt.Printf("📋 Request ID: %s\n", resp4.Header.Get("X-Request-ID"))
+		
+		var jwtData map[string]interface{}
+		json.Unmarshal(jwtBody, &jwtData)
+		prettyJWT, _ := json.MarshalIndent(jwtData, "", "  ")
+		fmt.Printf("📄 Response:\n%s\n", prettyJWT)
+	}
+	
+	// Demo 5: POST Request with JWT
+	fmt.Println("\n📝 DEMO 5: POST Request (Create Album)")
+	fmt.Println("-" + string(make([]byte, 50)))
+	
+	albumData := map[string]interface{}{
+		"id":     "demo-album-123",
+		"title":  "Demo Album",
+		"artist": "Demo Artist",
+		"price":  29.99,
+	}
+	
+	albumJSON, _ := json.Marshal(albumData)
+	req2, _ := http.NewRequest("POST", baseURL+"/albums", bytes.NewBuffer(albumJSON))
+	req2.Header.Set("Authorization", "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjE3NTk4MjY1NjMsImlhdCI6MTc1OTc0MDE2MywibmFtZSI6IkpvaG4gRG9lIiwicm9sZSI6ImFkbWluIiwic3ViIjoiam9obi5kb2VAZXhhbXBsZS5jb20iLCJ1c2VyX2lkIjoidXNlcjEyMzQ1In0.5AVfEPUD5b9iWVkT-oA8k2Kk-S0B8X3bmE8DdY0n9Gs")
+	req2.Header.Set("Content-Type", "application/json")
+	
+	resp5, err := client.Do(req2)
+	if err != nil {
+		fmt.Printf("❌ POST request failed: %v\n", err)
+	} else {
+		defer resp5.Body.Close()
+		postBody, _ := io.ReadAll(resp5.Body)
+		fmt.Printf("📝 POST Status: %d\n", resp5.StatusCode)
+		fmt.Printf("📋 Request ID: %s\n", resp5.Header.Get("X-Request-ID"))
+		
+		var postData map[string]interface{}
+		json.Unmarshal(postBody, &postData)
+		prettyPost, _ := json.MarshalIndent(postData, "", "  ")
+		fmt.Printf("📄 Response:\n%s\n", prettyPost)
+	}
+	
+	// Final metrics check
+	fmt.Println("\n📊 DEMO 6: Updated Metrics After Requests")
+	fmt.Println("-" + string(make([]byte, 50)))
+	
+	resp6, _ := client.Get(baseURL + "/metrics")
+	defer resp6.Body.Close()
+	finalMetrics, _ := io.ReadAll(resp6.Body)
+	
+	// Look for our custom metrics
+	metricsStr := string(finalMetrics)
+	fmt.Println("🔍 Looking for our custom metrics...")
+	
+	// Find internal API metrics
+	lines := []string{
+		"internal_api_requests_total",
+		"internal_api_request_duration_seconds",
+		"internal_api_external_calls_total",
+		"internal_api_external_duration_seconds",
+	}
+	
+	for _, line := range lines {
+		if contains(metricsStr, line) {
+			fmt.Printf("✅ Found metric: %s\n", line)
+		} else {
+			fmt.Printf("⚠️  Metric not found: %s\n", line)
+		}
+	}
+	
+	fmt.Println("\n🎉 DEMO COMPLETE!")
+	fmt.Println("Check the server logs to see structured logging with request IDs!")
+}
+
+func contains(str, substr string) bool {
+	return len(str) >= len(substr) && (str == substr || 
+		(len(str) > len(substr) && 
+			(str[:len(substr)] == substr || 
+				str[len(str)-len(substr):] == substr || 
+				findInString(str, substr))))
+}
+
+func findInString(str, substr string) bool {
+	for i := 0; i <= len(str)-len(substr); i++ {
+		if str[i:i+len(substr)] == substr {
+			return true
+		}
+	}
+	return false
+}
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}

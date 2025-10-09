@@ -1,53 +1,237 @@
-# Internal API - Central Management System Integration
+# 🏨 Hotel Internal API
 
-## 🏗️ **Complete Architecture Flow**
+A secure, scalable middleware service for hotel management systems, providing authentication, authorization, and request routing between the User Portal and backend services.
+
+## � Overview
+
+The Hotel Internal API serves as the central gateway in a distributed hotel management architecture, handling JWT authentication, permission validation, and seamless communication with data and business logic services.
+
+### Architecture
 
 ```
-User Portal → YOUR INTERNAL API → API Beheerder → Database/Storage
-                    ↓
-              Central Management System
+User Portal → Internal API → [API Beheerder + Central Management]
+     ↑              ↑                    ↑              ↑
+   Frontend     Middleware           Data Layer    Business Rules
 ```
 
-Your Internal API now acts as the orchestration layer that:
-1. **Receives requests from User Portal** (frontend/web app)
-2. **Authenticates users** via JWT tokens
-3. **Checks permissions and business rules** with Central Management System
-4. **Validates and processes business logic** 
-5. **Calls API Beheerder** for data operations
-6. **Sends audit logs** to Central Management System
-7. **Returns formatted responses** to User Portal
+## ✨ Features
 
-## 🎛️ **System Responsibilities**
+### 🔒 Security First
+- **JWT Authentication**: Secure token validation for User Portal access
+- **CORS Protection**: Configurable cross-origin resource sharing
+- **Request Correlation**: Unique request IDs for tracing and debugging
+- **Permission Validation**: Integration with Central Management for authorization
 
-### **Central Management System (Port 8082)**
-- **Permission Management**: Who can do what
-- **Business Rules Engine**: Dynamic rules and policies  
-- **Audit Logging**: Track all user actions
-- **User Filters**: Role-based data filtering
-- **Configuration Management**: System settings
-- **Analytics**: Usage tracking and reporting
+### 📊 Production Ready
+- **Structured Logging**: JSON logging with Logrus for observability
+- **Prometheus Metrics**: Built-in monitoring and performance tracking
+- **Health Checks**: Dependency monitoring for API Beheerder and Central Management
+- **Error Handling**: Standardized error responses with codes and timestamps
 
-### **API Beheerder (Port 8081)**  
-- **Data Storage**: CRUD operations
-- **Data Integrity**: Constraints and validation
-- **Database Management**: Connections and queries
-- **Data Consistency**: Transactions and locking
+### 🏗️ Modular Architecture
+- **Clean Code Structure**: Separated into focused modules for maintainability
+- **Microservice Pattern**: Designed for distributed hotel management systems
+- **Scalable Design**: Easy to extend and modify for growing requirements
 
-### **Your Internal API (Port 8080)**
-- **User Authentication**: JWT validation
-- **Request Orchestration**: Coordinate between systems
-- **Business Logic**: Application-specific rules
-- **Response Formatting**: Consistent API responses
-- **Error Handling**: Graceful error management
+## 🚀 Quick Start
 
-## 🚀 **What's Implemented**
+### Prerequisites
+- Go 1.21 or higher
+- Access to API Beheerder service
+- Access to Central Management service
 
-### ✅ **User Portal Authentication**
-- JWT token validation from `Authorization: Bearer <token>` headers
-- User context extraction and tracking
-- Protected endpoints that require authentication
+### Installation
 
-### ✅ **Central Management System Integration**
+1. **Clone the repository**
+   ```bash
+   git clone https://github.com/LarsSonke/InternalAPI.git
+   cd InternalAPI
+   ```
+
+2. **Install dependencies**
+   ```bash
+   go mod download
+   ```
+
+3. **Configure environment variables** (optional)
+   ```bash
+   export HOST=localhost
+   export PORT=8080
+   export JWT_SECRET=your-secret-key
+   export API_BEHEERDER_URL=http://localhost:8081
+   export CENTRAL_MGMT_URL=http://localhost:8082
+   ```
+
+4. **Build and run**
+   ```bash
+   go build -o internal-api .
+   ./internal-api
+   ```
+
+## 📚 API Documentation
+
+### Public Endpoints
+
+| Method | Endpoint | Description | Auth Required |
+|--------|----------|-------------|---------------|
+| GET | `/health` | Health check with dependency status | ❌ |
+| GET | `/metrics` | Prometheus metrics | ❌ |
+
+### User Portal Endpoints
+
+| Method | Endpoint | Description | Auth Required |
+|--------|----------|-------------|---------------|
+| GET | `/api/v1/albums` | Get hotel bookings/rooms | ✅ JWT |
+| GET | `/api/v1/albums/:id` | Get specific booking/room | ✅ JWT |
+| POST | `/api/v1/albums` | Create new booking/room | ✅ JWT |
+| PUT | `/api/v1/albums/:id` | Update booking/room | ✅ JWT |
+| DELETE | `/api/v1/albums/:id` | Cancel booking/delete room | ✅ JWT |
+
+### Admin Endpoints
+
+| Method | Endpoint | Description | Auth Required |
+|--------|----------|-------------|---------------|
+| GET | `/admin/system-status` | System status overview | ✅ JWT |
+| GET | `/admin/audit-logs` | Audit trail for compliance | ✅ JWT |
+
+## 🔧 Configuration
+
+The API can be configured through environment variables:
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `HOST` | `localhost` | Server host |
+| `PORT` | `8080` | Server port |
+| `JWT_SECRET` | `your-jwt-secret-key` | JWT signing secret |
+| `API_BEHEERDER_URL` | `http://localhost:8081` | API Beheerder service URL |
+| `API_BEHEERDER_KEY` | `beheerder-service-key` | API Beheerder authentication key |
+| `CENTRAL_MGMT_URL` | `http://localhost:8082` | Central Management service URL |
+| `CENTRAL_MGMT_KEY` | `central-mgmt-service-key` | Central Management authentication key |
+| `USER_PORTAL_URL` | `http://localhost:3000` | User Portal URL for CORS |
+| `ALLOWED_ORIGINS` | `http://localhost:3000,http://localhost:3001,https://hotel-portal.local` | CORS allowed origins |
+| `LOG_LEVEL` | `INFO` | Logging level (DEBUG, INFO, WARN, ERROR) |
+
+## 🏗️ Project Structure
+
+```
+.
+├── main.go           # Server setup, routing, and external service calls
+├── auth.go           # JWT validation and user extraction
+├── config.go         # Configuration management
+├── handlers.go       # API endpoint handlers
+├── middleware.go     # Request ID, metrics, and authentication middleware
+├── monitoring.go     # Health checks, metrics, and logging setup
+├── go.mod           # Go module dependencies
+└── go.sum           # Dependency checksums
+```
+
+## 🔍 Request Flow
+
+### Authenticated Request Example
+
+1. **User Portal** sends request with JWT token
+2. **Internal API** validates JWT and extracts user information
+3. **Permission Check** with Central Management System
+4. **Data Request** forwarded to API Beheerder
+5. **Response** processed and returned to User Portal
+6. **Audit Log** recorded for compliance
+
+```json
+{
+  "request_id": "12345-67890-abcdef",
+  "user_id": "user_123",
+  "action": "get_bookings",
+  "permission_check": "✅ allowed",
+  "data_service": "✅ success",
+  "response_time": "89ms"
+}
+```
+
+## 📊 Monitoring
+
+### Health Check Response
+```json
+{
+  "status": "healthy",
+  "service": "internal-api",
+  "version": "1.0.0",
+  "dependencies": {
+    "api_beheerder": {
+      "status": "healthy",
+      "duration": 45
+    },
+    "central_management": {
+      "status": "healthy",
+      "duration": 32
+    }
+  }
+}
+```
+
+### Prometheus Metrics
+- `internal_api_requests_total` - Total HTTP requests
+- `internal_api_request_duration_seconds` - Request duration
+- `internal_api_external_calls_total` - External service calls
+- `internal_api_external_duration_seconds` - External service duration
+
+## 🛠️ Development
+
+### Running Tests
+```bash
+go test ./...
+```
+
+### Building for Production
+```bash
+go build -ldflags="-s -w" -o internal-api .
+```
+
+### Docker Support
+```dockerfile
+FROM golang:1.21-alpine AS builder
+WORKDIR /app
+COPY . .
+RUN go build -o internal-api .
+
+FROM alpine:latest
+RUN apk --no-cache add ca-certificates
+WORKDIR /root/
+COPY --from=builder /app/internal-api .
+EXPOSE 8080
+CMD ["./internal-api"]
+```
+
+## 🤝 Contributing
+
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
+
+## 📝 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## 🏨 Hotel Management Ecosystem
+
+This Internal API is part of a larger hotel management system:
+
+- **User Portal**: React frontend for hotel staff and management
+- **Internal API**: This service - secure middleware and authentication
+- **API Beheerder**: Data layer service handling database operations
+- **Central Management**: Business rules, permissions, and audit logging
+- **Plugin System**: Extensible architecture for third-party integrations
+
+## 📧 Contact
+
+**Author**: Lars Sonke  
+**GitHub**: [@LarsSonke](https://github.com/LarsSonke)  
+**Project**: [InternalAPI](https://github.com/LarsSonke/InternalAPI)
+
+---
+
+⭐ **If you find this project useful, please consider giving it a star!**
 - **Permission Checking**: Before any operation, check if user is allowed
 - **Business Rules**: Dynamic rules fetched from Central Management
 - **Audit Logging**: All actions logged for compliance and security

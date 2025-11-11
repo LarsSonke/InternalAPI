@@ -1,10 +1,17 @@
 package main
 
 import (
+	"context"
 	"fmt"
+	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
 	"InternalAPI/internal/circuitbreaker"
 	"InternalAPI/internal/config"
+	"InternalAPI/internal/middleware"
 	"InternalAPI/internal/routes"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
@@ -22,6 +29,14 @@ func init() {
 func main() {
 	// Load configuration
 	cfg := config.Load()
+
+	// Validate JWT secret
+	if cfg.JWTSecret == "your-jwt-secret-key" {
+		log.Warn("⚠️  WARNING: Using default JWT secret! Set JWT_SECRET environment variable in production!")
+	}
+
+	// Initialize JWT middleware with secret
+	middleware.InitJWT(cfg.JWTSecret)
 
 	// Initialize circuit breakers for external services
 	circuitbreaker.Init("api-beheerder", cfg.CircuitBreakerFailureThreshold, cfg.CircuitBreakerTimeout, cfg.CircuitBreakerMaxRetries, cfg.CircuitBreakerRetryDelay)
@@ -41,6 +56,25 @@ func main() {
 	router := gin.New()
 	router.Use(gin.Logger(), gin.Recovery())
 
+	// Add security middleware
+	if cfg.EnableSecurityHeaders {
+		router.Use(middleware.SecurityHeaders())
+		log.Info("Security headers enabled")
+	}
+
+	// Add request ID tracking
+	router.Use(middleware.RequestID())
+
+	// Add audit logging
+	if cfg.EnableAuditLogging {
+		router.Use(middleware.AuditLogger())
+		log.Info("Audit logging enabled")
+	}
+
+	// Add request size limit
+	router.Use(middleware.RequestSizeLimit(cfg.MaxRequestBodySize))
+	log.WithField("max_size_mb", cfg.MaxRequestBodySize/(1024*1024)).Info("Request size limit configured")
+
 	// Add CORS middleware for User Portal access
 	corsConfig := cors.DefaultConfig()
 	corsConfig.AllowOrigins = []string{
@@ -49,7 +83,7 @@ func main() {
 		"https://hotel-portal.local",
 	}
 	corsConfig.AllowCredentials = true
-	corsConfig.AllowHeaders = []string{"Origin", "Content-Length", "Content-Type", "Authorization", "X-Internal-API-Key"}
+	corsConfig.AllowHeaders = []string{"Origin", "Content-Length", "Content-Type", "Authorization", "X-Internal-API-Key", "X-Request-ID"}
 	router.Use(cors.New(corsConfig))
 
 	log.WithFields(logrus.Fields{
@@ -59,18 +93,32 @@ func main() {
 	// Setup routes with handlers
 	routes.Setup(router, cfg)
 
-	// Start server
+	// Create HTTP server with timeouts
 	address := cfg.Host + ":" + cfg.Port
-	
+	srv := &http.Server{
+		Addr:         address,
+		Handler:      router,
+		ReadTimeout:  cfg.ReadTimeout,
+		WriteTimeout: cfg.WriteTimeout,
+		IdleTimeout:  cfg.IdleTimeout,
+	}
+
 	log.WithFields(logrus.Fields{
-		"address":            address,
-		"api_beheerder_url":  cfg.APIBeheerderURL,
-		"central_mgmt_url":   cfg.CentralMgmtURL,
-		"cors_origins":       cfg.AllowedOrigins,
-		"user_portal_url":    cfg.UserPortalURL,
-		"api_endpoint":       "http://" + address + "/api/v1",
-		"health_endpoint":    "http://" + address + "/health", 
-		"metrics_endpoint":   "http://" + address + "/metrics",
+		"address":              address,
+		"api_beheerder_url":    cfg.APIBeheerderURL,
+		"central_mgmt_url":     cfg.CentralMgmtURL,
+		"cors_origins":         cfg.AllowedOrigins,
+		"user_portal_url":      cfg.UserPortalURL,
+		"api_endpoint":         "http://" + address + "/api/v1",
+		"health_endpoint":      "http://" + address + "/health",
+		"metrics_endpoint":     "http://" + address + "/metrics",
+		"read_timeout":         cfg.ReadTimeout,
+		"write_timeout":        cfg.WriteTimeout,
+		"idle_timeout":         cfg.IdleTimeout,
+		"max_request_body_mb":  cfg.MaxRequestBodySize / (1024 * 1024),
+		"rate_limit_enabled":   cfg.RateLimitEnabled,
+		"security_headers":     cfg.EnableSecurityHeaders,
+		"audit_logging":        cfg.EnableAuditLogging,
 	}).Info("Hotel Internal API started successfully")
 
 	// Pretty startup messages
@@ -80,10 +128,35 @@ func main() {
 	fmt.Printf("   👤 User Portal: %s\n", cfg.UserPortalURL)
 	fmt.Printf("   📊 Metrics: http://%s/metrics\n", address)
 	fmt.Printf("   💚 Health: http://%s/health\n", address)
+	fmt.Printf("   🔒 Security: Headers=%v, Audit=%v, RateLimit=%v\n", 
+		cfg.EnableSecurityHeaders, cfg.EnableAuditLogging, cfg.RateLimitEnabled)
+	fmt.Printf("   ⏱️  Timeouts: Read=%v, Write=%v, Idle=%v\n", 
+		cfg.ReadTimeout, cfg.WriteTimeout, cfg.IdleTimeout)
 
-	if err := router.Run(address); err != nil {
-		panic(fmt.Sprintf("Failed to start server: %v", err))
+	// Start server in a goroutine
+	go func() {
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatalf("Failed to start server: %v", err)
+		}
+	}()
+
+	// Wait for interrupt signal for graceful shutdown
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	<-quit
+
+	log.Info("Shutting down server gracefully...")
+
+	// Create shutdown context with timeout
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	// Attempt graceful shutdown
+	if err := srv.Shutdown(ctx); err != nil {
+		log.Errorf("Server forced to shutdown: %v", err)
 	}
+
+	log.Info("Server exited")
 }
 
 // setupLogging configures structured logging

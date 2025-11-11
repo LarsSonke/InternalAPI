@@ -21,8 +21,14 @@ func Setup(router *gin.Engine, config *config.Config) {
 	router.GET("/health/circuit-breakers", handlers.GetCircuitBreakerStatusHandler)
 	router.GET("/metrics", gin.WrapH(promhttp.Handler()))
 	
-	// Authentication routes
+	// Authentication routes with strict rate limiting
 	auth := router.Group("/auth")
+	if config.RateLimitEnabled {
+		auth.Use(middleware.StrictRateLimitByIP(
+			config.LoginRateLimitRequests,
+			config.LoginRateLimitInterval,
+		))
+	}
 	{
 		auth.POST("/login", authHandlers.Login)
 		auth.POST("/refresh", authHandlers.RefreshToken)
@@ -30,7 +36,13 @@ func Setup(router *gin.Engine, config *config.Config) {
 
 	// Protected routes (requires JWT authentication)
 	protected := router.Group("/api/v1")
-	protected.Use(middleware.AuthMiddleware())
+	protected.Use(middleware.JWTAuthMiddleware())
+	if config.RateLimitEnabled {
+		protected.Use(middleware.RateLimitByUser(
+			config.RateLimitRequests,
+			config.RateLimitInterval,
+		))
+	}
 	{
 		// Auth user info routes
 		protected.POST("/auth/logout", authHandlers.Logout)
@@ -47,8 +59,14 @@ func Setup(router *gin.Engine, config *config.Config) {
 
 	// Admin routes (requires JWT + admin role)
 	admin := router.Group("/admin")
-	admin.Use(middleware.AuthMiddleware())
+	admin.Use(middleware.JWTAuthMiddleware())
 	admin.Use(middleware.RequireRoles("admin", "super_admin"))
+	if config.RateLimitEnabled {
+		admin.Use(middleware.RateLimitByUser(
+			config.AdminRateLimitRequests,
+			config.AdminRateLimitInterval,
+		))
+	}
 	{
 		// User management
 		admin.GET("/users", adminHandlers.GetUsers)

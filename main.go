@@ -1,6 +1,7 @@
 package main
 
 import (
+	"InternalAPI/internal/broker"
 	"context"
 	"fmt"
 	"net/http"
@@ -133,7 +134,10 @@ func main() {
 	fmt.Printf("   ⏱️  Timeouts: Read=%v, Write=%v, Idle=%v\n", 
 		cfg.ReadTimeout, cfg.WriteTimeout, cfg.IdleTimeout)
 
-	// Start server in a goroutine
+		// Register with broker (non-blocking)
+	broker.RegisterWithBroker(cfg.Host, cfg.Port)
+
+// Start server in a goroutine
 	go func() {
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("Failed to start server: %v", err)

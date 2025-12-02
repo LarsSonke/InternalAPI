@@ -50,3 +50,10 @@ bin/
 # Old files and archives
 old-files
 *.old
+
+# Test scripts and extra documentation
+test-*.ps1
+test-*.json
+BROKER_INTEGRATION.md
+SECURITY.md
+SECURITY_TESTING.md
